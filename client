@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+
+import ssl
+import socket
+import random
+import json
+import argparse
+
+
+# ----- #
+
+# Socket Connection
+
+# ----- #
+
+# Create the parser
+parser = argparse.ArgumentParser()
+# Add an argument
+parser.add_argument('-p', required=False, default=27993)
+parser.add_argument('-s', required=False, default=False, action='store_true')
+parser.add_argument('hostname', type=str)
+parser.add_argument('username', type=str)
+# Parse the argument
+args = parser.parse_args()
+
+if args.s == True:
+    args = parser.parse_args()
+    context = ssl.SSLContext()
+    s = ssl.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+    s.connect((args.hostname, 27994))
+else:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((args.hostname, 27993))
+
+# ----- #
+
+# Hello Message
+
+# ----- #
+
+newMessage = '\n'
+
+helloMessage = json.dumps(
+    {"type": "hello", "northeastern_username": args.username}) + newMessage
+
+helloMessageByte = helloMessage.encode()
+
+s.sendall(helloMessageByte)
+
+helloRecieve = s.recv(1024)
+
+helloRecieveDict = json.loads(helloRecieve)
+
+secretID = helloRecieveDict['id']
+
+# ----- #
+
+# Guess First Message
+
+# ----- #
+
+guessMessage = json.dumps(
+    {"type": "guess", "id": secretID, "word": 'slate'}) + newMessage
+
+
+def guessFunction():
+    guessMessageByte = guessMessage.encode()
+
+    s.sendall(guessMessageByte)
+
+    return (json.loads(s.recv(1024)))
+
+
+# ----- #
+
+# Wordle Algorithm
+
+# ----- #
+
+
+wordList = open("project1-words.txt").readlines()
+
+curr = 0
+
+guessIndex = 0
+
+numGuesses = 1
+
+filteredList = wordList
+
+currGuessWord = guessFunction()['guesses'][guessIndex]['word']
+
+currGuessMarks = guessFunction()['guesses'][guessIndex]['marks']
+
+while numGuesses <= 500:
+    for num in range(len(currGuessMarks)):
+        if currGuessMarks[num] == 2:
+            currIndex = num
+
+            filteredList = [
+                word for word in filteredList if word[currIndex] == currGuessWord[currIndex]]
+
+            randomWordFromFilter = random.choice(filteredList)[:-1]
+
+        if currGuessMarks[num] == 1:
+            currIndex = num
+
+            filteredList = [
+                word for word in filteredList if currGuessWord[currIndex] in word]
+
+            randomWordFromFilter = random.choice(filteredList)[:-1]
+
+        else:
+            randomWordFromFilter = random.choice(filteredList)[:-1]
+
+    guessMessage = json.dumps(
+        {"type": "guess", "id": secretID, "word": randomWordFromFilter}) + newMessage
+
+    guessMessageByte = guessMessage.encode()
+
+    s.sendall(guessMessageByte)
+
+    guessRecieve = json.loads(s.recv(2048))
+
+    if guessRecieve['type'] == 'bye':
+        correctFlag = guessRecieve['flag']
+        print(correctFlag)
+        f = open("secret_flags", "a")
+        f.write(correctFlag)
+        f.write('\n')
+        f.close()
+        break
+
+    guessIndex += 1
+
+    numGuesses += 1
+
+    currGuessWord = guessRecieve['guesses'][guessIndex]['word']
+
+    currGuessMarks = guessRecieve['guesses'][guessIndex]['marks']
